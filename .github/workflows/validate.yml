@@ -1,0 +1,77 @@
+name: Validate data
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate data.json
+        run: |
+          python3 - <<'PY'
+          import json, re, sys
+          from datetime import datetime
+
+          FILE = "data.json"
+          UUID = r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+          SECTIONS = {"world": "wrld", "group": "grp"}
+          FIELDS = {"id", "name", "comment", "time-date"}
+          DATE_FORMAT = "%Y-%m-%dT%H:%M:%S"  # e.g. 2026-10-10T11:30:00
+
+          errors = []
+          try:
+              with open(FILE, encoding="utf-8") as f:
+                  data = json.load(f)
+          except (OSError, json.JSONDecodeError) as e:
+              print(f"::error::{FILE}: cannot read/parse JSON: {e}")
+              sys.exit(1)
+
+          if not isinstance(data, dict):
+              print(f"::error::{FILE}: top level must be an object")
+              sys.exit(1)
+
+          for key in data:
+              if key not in SECTIONS:
+                  errors.append(f"unexpected section '{key}'")
+
+          for section, prefix in SECTIONS.items():
+              entries = data.get(section)
+              if not isinstance(entries, list):
+                  errors.append(f"'{section}' must be a list")
+                  continue
+              seen = set()
+              for i, entry in enumerate(entries):
+                  where = f"{section}[{i}]"
+                  if not isinstance(entry, dict):
+                      errors.append(f"{where}: must be an object")
+                      continue
+                  missing = FIELDS - entry.keys()
+                  extra = entry.keys() - FIELDS
+                  if missing:
+                      errors.append(f"{where}: missing {sorted(missing)}")
+                  if extra:
+                      errors.append(f"{where}: unexpected fields {sorted(extra)}")
+                  _id = entry.get("id", "")
+                  if not re.fullmatch(f"{prefix}_{UUID}", str(_id)):
+                      errors.append(f"{where}: id '{_id}' must look like {prefix}_<uuid>")
+                  elif _id in seen:
+                      errors.append(f"{where}: duplicate id '{_id}'")
+                  seen.add(_id)
+                  for field in ("name", "comment"):
+                      if field in entry and not str(entry[field]).strip():
+                          errors.append(f"{where}: '{field}' is empty")
+                  if "time-date" in entry:
+                      try:
+                          datetime.strptime(entry["time-date"], DATE_FORMAT)
+                      except (ValueError, TypeError):
+                          errors.append(f"{where}: time-date '{entry['time-date']}' must match YYYY-MM-DDTHH:MM:SS")
+
+          for e in errors:
+              print(f"::error::{FILE}: {e}")
+          if errors:
+              sys.exit(1)
+          print(f"OK: {FILE} valid")
+          PY
