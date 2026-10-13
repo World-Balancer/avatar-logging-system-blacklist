@@ -15,7 +15,7 @@ jobs:
           import json, re, sys
           from datetime import datetime
 
-          FILE = "data.json"
+          FILE = "blacklist.json"
           UUID = r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
           SECTIONS = {"world": "wrld", "group": "grp"}
           FIELDS = {"id", "name", "comment", "time-date"}
